@@ -33,12 +33,12 @@ void dump_hex(uint8_t *buf, int len)
 	int i;
 	for (i=0; i < len; i++) {
 		if (i % 16 == 0) {
-			printf("%04x: ", i);
+			fprintf(stderr, "%04x: ", i);
 		}
-		printf("%02x ", buf[i]);
+		fprintf(stderr, "%02x ", buf[i]);
 		if ((i + 1) % 16 == 0) {
-			printf("\n");
+			fprintf(stderr, "\n");
 		}
 	}
-	printf("\n");
+	fprintf(stderr, "\n");
 }

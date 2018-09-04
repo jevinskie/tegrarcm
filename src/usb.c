@@ -229,6 +229,8 @@ usb_device_t *usb_open(uint16_t venid, uint16_t *devid
 		goto fail;
 	}
 
+	libusb_set_option(NULL, LIBUSB_OPTION_LOG_LEVEL, LIBUSB_LOG_LEVEL_DEBUG);
+
 	cnt = libusb_get_device_list(NULL, &list);
 	if (cnt < 0) {
 		dprintf("libusb_get_device_list\n");

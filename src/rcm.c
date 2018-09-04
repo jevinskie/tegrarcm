@@ -381,10 +381,14 @@ static uint32_t rcm_get_pad_len(uint32_t payload_len)
 	uint32_t pad_len = 0;
 	uint32_t msg_len = message_size + payload_len;
 
+	fprintf(stderr, "rcm_get_pad_len message_size: 0x%08x payload_len 0x%08x msg_len 0x%08x\n", message_size, payload_len, msg_len);
+
 	// First, use padding to bump the message size up to the minimum.
 	if (msg_len < RCM_MIN_MSG_LENGTH) {
 		pad_len = RCM_MIN_MSG_LENGTH - msg_len;
+		fprintf(stderr, "rcm_get_pad_len pad_len (0x%08x) = RCM_MIN_MSG_LENGTH (0x%08x) - msg_len (0x%08x)\n", pad_len, RCM_MIN_MSG_LENGTH, msg_len);
 		msg_len += pad_len;
+		fprintf(stderr, "rcm_get_pad_len msg_len (0x%08x) += RCM_MIN_MSG_LENGTH (0x%08x)\n", msg_len, pad_len);
 	}
 
 	/*
@@ -394,6 +398,11 @@ static uint32_t rcm_get_pad_len(uint32_t payload_len)
 	 * the hashing and encryption.
 	 */
 	pad_len += 16 - ((msg_len - message_size) & 0xf);
+	fprintf(stderr, "msg_len (0x%08x) - message_size (0x%08x) = 0x%08x\n", msg_len, message_size, msg_len - message_size);
+	fprintf(stderr, "(msg_len (0x%08x) - message_size (0x%08x)) & 0xf = 0x%08x\n", msg_len, message_size, (msg_len - message_size) & 0xf);
+	fprintf(stderr, "16 - ((msg_len (0x%08x) - message_size (0x%08x)) & 0xf) = 0x%08x\n", msg_len, message_size, 16 - ((msg_len - message_size) & 0xf));
+	fprintf(stderr, "rcm_get_pad_len pad_len (0x%08x) += 16 - ((msg_len (0x%08x) - message_size (0x%08x)) & 0xf)\n", pad_len, msg_len, message_size);
+
 
 	return pad_len;
 }

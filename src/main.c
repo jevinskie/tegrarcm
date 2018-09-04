@@ -31,7 +31,6 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
-#include <error.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -39,6 +38,21 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <inttypes.h>
+
+#ifndef __APPLE__
+#include <error.h>
+#else
+#include <stdarg.h>
+static void error (int status, int errnum, const char *message, ...)
+{
+	va_list args;
+	va_start(args, message);
+	fprintf(stderr, "error(0x%08x) status: %d strerror: %s: ", errnum, status, strerror(errnum));
+	vfprintf(stderr, message, args);
+	fprintf(stderr, "\n");
+	va_end(args);
+}
+#endif
 
 #include "usb.h"
 #include "nv3p.h"
@@ -664,7 +678,7 @@ static int initialize_rcm(uint16_t devid, usb_device_t *usb,
 		msg_buff = (uint8_t *)malloc(sb.st_size);
 		if (!msg_buff) {
 			fprintf(stderr, "error allocating %zd bytes for query"
-				" rcm\n", sb.st_size);
+				" rcm\n", (ssize_t)sb.st_size);
 			return errno;
 		}
 		if (read(fd, msg_buff, sb.st_size) != sb.st_size) {
@@ -681,6 +695,10 @@ static int initialize_rcm(uint16_t devid, usb_device_t *usb,
 		fprintf(stderr, "write RCM query version: unknown message length\n");
 		return EINVAL;
 	}
+	fprintf(stderr, "RCM query msg_len %d\n", msg_len);
+	fprintf(stderr, "RCM qeury msg:\n");
+	dump_hex(msg_buff, msg_len);
+	fprintf(stderr, "RCM qeury msg dump done\n");
 	ret = usb_write(usb, msg_buff, msg_len);
 	if (ret) {
 		fprintf(stderr, "write RCM query version: USB transfer failure\n");
@@ -698,6 +716,9 @@ static int initialize_rcm(uint16_t devid, usb_device_t *usb,
 		ret = EIO;
 		goto done;
 	}
+	fprintf(stderr, "rcm ver response dump:\n");
+	dump_hex((uint8_t *)&status, sizeof(status));
+	fprintf(stderr, "rcm ver response dump done\n");
 	printf("RCM version: %d.%d\n", RCM_VERSION_MAJOR(status),
 	       RCM_VERSION_MINOR(status));
 
@@ -801,6 +822,7 @@ static int initialize_miniloader(uint16_t devid, usb_device_t *usb,
 	ret = download_miniloader(usb, miniloader, miniloader_size,
 				  miniloader_entry, download_signed_msgs);
 	if (ret) {
+
 		fprintf(stderr, "Error downloading miniloader\n");
 		return ret;
 	}
@@ -967,16 +989,24 @@ static int download_miniloader(usb_device_t *usb, uint8_t *miniloader,
 		msg_buff_alloc = true;
 	}
 
+	fprintf(stderr, "download_miniloader len(0x%08x) dump:\n", rcm_get_msg_len(msg_buff));
+	dump_hex(msg_buff, rcm_get_msg_len(msg_buff));
+	fprintf(stderr, "download_miniloader dump done\n");
+
 	ret = usb_write(usb, msg_buff, rcm_get_msg_len(msg_buff));
-	if (ret)
-		goto fail;
+	// if (ret)
+	// 	goto fail;
 	ret = usb_read(usb, (uint8_t *)&status, sizeof(status), &actual_len);
-	if (ret)
+	if (ret) {
+		fprintf(stderr, "download_miniloader: 0x%08x usb read fail\n", ret);
 		goto fail;
+	}
 	if (actual_len < sizeof(status)) {
+		fprintf(stderr, "download_miniloader: couldn't read rcm error actual_len %d\n", actual_len);
 		ret = EIO;
 		goto fail;
 	}
+	fprintf(stderr, "download_miniloader: rcm error: 0x%08x\n", status);
 	if (status != 0) {
 		ret = EIO;
 		goto fail;
