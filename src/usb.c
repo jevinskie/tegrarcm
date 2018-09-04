@@ -79,6 +79,7 @@ static int usb_match(libusb_device *dev, uint16_t venid, uint16_t *devid
 	case USB_DEVID_NVIDIA_TEGRA30:
 	case USB_DEVID_NVIDIA_TEGRA114:
 	case USB_DEVID_NVIDIA_TEGRA124:
+	case USB_DEVID_NVIDIA_TEGRA132:
 		break;
 	default:
 		dprintf("non-Tegra NVIDIA USB device: 0x%x:0x%x\n",
