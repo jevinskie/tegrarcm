@@ -34,6 +34,10 @@
 #include "aes-cmac.h"
 #include "rsa-pss.h"
 
+bool enc_msgs;
+
+static int rcm_enc_msg(uint8_t *buf);
+static int rcm1_enc_msg(uint8_t *buf);
 static int rcm_sign_msg(uint8_t *buf);
 static int rcm1_sign_msg(uint8_t *buf);
 static int rcm35_sign_msg(uint8_t *buf);
@@ -141,6 +145,9 @@ int rcm_create_msg(
 	if (payload_len)
 		memcpy(msg_payload, payload, payload_len);
 
+	if (enc_msgs)
+		rcm_enc_msg(msg);
+
 	// sign message
 	rcm_sign_msg(msg);
 
@@ -153,6 +160,34 @@ done:
 	*buf = msg;
 
 	return ret;
+}
+
+static int rcm_enc_msg(uint8_t *buf)
+{
+	if (rcm_version == RCM_VERSION_1)
+		return rcm1_enc_msg(buf);
+	else
+		return -EINVAL;
+}
+
+static int rcm1_enc_msg(uint8_t *buf)
+{
+	rcm1_msg_t *msg;
+	uint32_t crypto_len;
+	uint8_t iv[RCM_AES_BLOCK_SIZE] = { 0 };
+
+	msg = (rcm1_msg_t*)buf;
+
+	// signing does not include the len_insecure and
+	// cmac_hash fields at the beginning of the message.
+	crypto_len = msg->len_insecure - sizeof(msg->len_insecure) -
+		sizeof(msg->cmac_hash);
+	if (crypto_len % RCM_AES_BLOCK_SIZE) {
+		return -EMSGSIZE;
+	}
+
+	aes_cbc_enc(msg->reserved, msg->reserved, crypto_len, iv);
+	return 0;
 }
 
 static int rcm_sign_msg(uint8_t *buf)

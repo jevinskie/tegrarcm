@@ -49,6 +49,7 @@ using std::exit;
 #define CRYPTOPP_INCLUDE_HEX		<CRYPTOLIB_HEADER_PREFIX/hex.h>
 #define CRYPTOPP_INCLUDE_FILTERS	<CRYPTOLIB_HEADER_PREFIX/filters.h>
 #define CRYPTOPP_INCLUDE_SECBLOCK	<CRYPTOLIB_HEADER_PREFIX/secblock.h>
+#define CRYPTOPP_INCLUDE_CBC		<CRYPTOLIB_HEADER_PREFIX/modes.h>
 
 #include CRYPTOPP_INCLUDE_CRYPTLIB
 #include CRYPTOPP_INCLUDE_CMAC
@@ -56,6 +57,7 @@ using std::exit;
 #include CRYPTOPP_INCLUDE_HEX
 #include CRYPTOPP_INCLUDE_FILTERS
 #include CRYPTOPP_INCLUDE_SECBLOCK
+#include CRYPTOPP_INCLUDE_CBC
 
 using CryptoPP::Exception;
 using CryptoPP::CMAC;
@@ -67,10 +69,13 @@ using CryptoPP::StringSource;
 using CryptoPP::HashFilter;
 using CryptoPP::HashVerificationFilter;
 using CryptoPP::SecByteBlock;
+using CryptoPP::CBC_Mode;
+
+unsigned char sbk[16];
 
 extern "C" int cmac_hash(const unsigned char *msg, int len, unsigned char *cmac_buf)
 {
-	SecByteBlock key(NULL, AES::DEFAULT_KEYLENGTH);
+	SecByteBlock key(sbk, AES::DEFAULT_KEYLENGTH);
 
 	string plain((const char *)msg, len);
 	string mac, encoded;
@@ -91,5 +96,13 @@ extern "C" int cmac_hash(const unsigned char *msg, int len, unsigned char *cmac_
 
 	memcpy(cmac_buf, mac.data(), mac.length());
 
+	return 0;
+}
+
+extern "C" int aes_cbc_enc(const unsigned char *in, unsigned char *out, int len, unsigned char *iv)
+{
+	CBC_Mode< AES >::Encryption e;
+	e.SetKeyWithIV(sbk, AES::DEFAULT_KEYLENGTH, iv);
+	e.ProcessData(out, in, len);
 	return 0;
 }

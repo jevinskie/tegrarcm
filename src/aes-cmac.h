@@ -33,7 +33,10 @@
 extern "C" {
 #endif
 
+extern unsigned char sbk[16];
+
 int cmac_hash(const unsigned char *msg, int len, unsigned char *cmac_buf);
+int aes_cbc_enc(const unsigned char *in, unsigned char *out, int len, unsigned char *iv);
 
 #ifdef __cplusplus
 }

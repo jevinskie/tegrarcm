@@ -124,6 +124,8 @@ enum cmdline_opts {
 	OPT_SOC,
 	OPT_DOWNLOAD_SIGNED_MSGS,
 	OPT_USB_TIMEOUT,
+	OPT_SBK,
+	OPT_ENC_MSGS,
 	OPT_END,
 };
 
@@ -176,6 +178,10 @@ static void usage(char *progname)
 	fprintf(stderr, "\t\tDownload signed messages\n");
 	fprintf(stderr, "\t--usb-timeout=<timeout_ms>\n");
 	fprintf(stderr, "\t\tSpecify usb transfer timeout value in ms, 0 for unlimited timeout\n");
+	fprintf(stderr, "\t--sbk=<Secure Boot Key in hex>\n");
+	fprintf(stderr, "\t\tSpecify SBK, an all zero key is used otherwise\n");
+	fprintf(stderr, "\t--enc\n");
+	fprintf(stderr, "\t\tEncrypt RCM messages with the SBK\n");
 	fprintf(stderr, "\n");
 }
 
@@ -281,6 +287,8 @@ int main(int argc, char **argv)
 		[OPT_SOC]        = {"soc", 1, 0, 0},
 		[OPT_DOWNLOAD_SIGNED_MSGS] = {"download-signed-msgs", 0, 0, 0},
 		[OPT_USB_TIMEOUT] = {"usb-timeout", 1, 0, 0},
+		[OPT_SBK] 		 = {"sbk", 1, 0, 0},
+		[OPT_ENC_MSGS]	 = {"enc", 0, 0, 0},
 		[OPT_END]        = {0, 0, 0, 0}
 	};
 	// parse command line args
@@ -340,6 +348,19 @@ int main(int argc, char **argv)
 				break;
 			case OPT_USB_TIMEOUT:
 				usb_timeout = strtoul(optarg, NULL, 0);
+				break;
+			case OPT_SBK:
+				if(strlen(optarg) == sizeof(sbk) * 2) {
+					for(int i = 0; i < sizeof(sbk); i++) {
+						sscanf(&optarg[i * 2], "%2hhx", &sbk[i]);
+					}
+				} else {
+					fprintf(stderr, "invalid key length: %zu\n", strlen(optarg));
+					exit(3);
+				}
+				break;
+			case OPT_ENC_MSGS:
+				enc_msgs = true;
 				break;
 			case OPT_HELP:
 			default:
@@ -479,6 +500,7 @@ int main(int argc, char **argv)
 	}
 
 	/* start nv3p protocol */
+#if 1
 	usb = usb_open(USB_VENID_NVIDIA, &devid
 #ifdef HAVE_USB_PORT_MATCH
 		, &match_port, &match_bus, match_ports, &match_ports_len
@@ -486,15 +508,21 @@ int main(int argc, char **argv)
 	);
 	if (!usb)
 		error(1, errno, "could not open USB device");
+#else
+	usb = NULL;
+	devid = 0x7330;
+#endif
 	printf("device id: 0x%x\n", devid);
 
 	ret = usb_read(usb, (uint8_t *)uid, sizeof(uid), &actual_len);
+	// ret = 0;
+	// actual_len = 8;
 	if (!ret) {
 		if (actual_len == 8)
 			printf("uid:  0x%016" PRIx64 "\n", uid[0]);
 		else if (actual_len == 16)
 			printf("uid:  0x%016" PRIx64 "%016" PRIx64 "\n",
-			       uid[1], uid[0]);
+					uid[1], uid[0]);
 		else
 			error(1, errno, "USB read truncated");
 
@@ -548,12 +576,12 @@ int main(int argc, char **argv)
 	set_platform_info(&info);
 
 	if (info.op_mode != RCM_OP_MODE_DEVEL &&
-	    info.op_mode != RCM_OP_MODE_ODM_OPEN &&
-	    info.op_mode != RCM_OP_MODE_ODM_SECURE &&
-	    info.op_mode != RCM_OP_MODE_ODM_SECURE_PKC &&
-	    info.op_mode != RCM_OP_MODE_PRE_PRODUCTION)
+		info.op_mode != RCM_OP_MODE_ODM_OPEN &&
+		info.op_mode != RCM_OP_MODE_ODM_SECURE &&
+		info.op_mode != RCM_OP_MODE_ODM_SECURE_PKC &&
+		info.op_mode != RCM_OP_MODE_PRE_PRODUCTION)
 		error(1, ENODEV, "device is not in developer, open, secure, "
-		      "or pre-production mode, cannot flash");
+			  "or pre-production mode, cannot flash");
 
 	// download the BCT
 	ret = download_bct(h3p, bctfile);
@@ -620,7 +648,7 @@ static int initialize_rcm(uint16_t devid, usb_device_t *usb,
 
 	// initialize RCM
 	if ((devid & 0xff) == USB_DEVID_NVIDIA_TEGRA20 ||
-	    (devid & 0xff) == USB_DEVID_NVIDIA_TEGRA30) {
+		(devid & 0xff) == USB_DEVID_NVIDIA_TEGRA30) {
 		dprintf("initializing RCM version 1\n");
 		ret = rcm_init(RCM_VERSION_1, pkc_keyfile);
 	} else if ((devid & 0xff) == USB_DEVID_NVIDIA_TEGRA114) {
@@ -724,7 +752,7 @@ static int initialize_rcm(uint16_t devid, usb_device_t *usb,
 	dump_hex((uint8_t *)&status, sizeof(status));
 	fprintf(stderr, "rcm ver response dump done\n");
 	printf("RCM version: %d.%d\n", RCM_VERSION_MAJOR(status),
-	       RCM_VERSION_MINOR(status));
+		   RCM_VERSION_MINOR(status));
 
 done:
 	if (msg_buff)
@@ -872,7 +900,7 @@ static int wait_status(nv3p_handle_t h3p)
 fail:
 	if(status_arg) {
 		printf("bootloader status: (code: %d) message: %s flags: %d\n",
-		       status_arg->code, status_arg->msg, status_arg->flags );
+			   status_arg->code, status_arg->msg, status_arg->flags );
 	}
 	return ret;
 }
@@ -962,7 +990,7 @@ static int create_miniloader_rcm(uint8_t *miniloader, uint32_t size,
 
 	// create RCM_CMD_DL_MINILOADER blob
 	rcm_create_msg(RCM_CMD_DL_MINILOADER, (uint8_t *)&entry, sizeof(entry),
-		       miniloader, size, &msg_buff);
+			   miniloader, size, &msg_buff);
 
 	ret = create_name_string(ml_rcm_filename, signed_msgs_file, ".ml");
 	if (ret)
@@ -1030,7 +1058,7 @@ fail:
 static void dump_platform_info(nv3p_platform_info_t *info)
 {
 	printf("Chip UID:                0x%016" PRIx64 "%016" PRIx64 "\n",
-	       info->uid[1], info->uid[0]);
+		   info->uid[1], info->uid[0]);
 	printf("Chip ID:                 0x%x\n", (uint32_t)info->chip_id.id);
 	printf("Chip ID Major Version:   0x%x\n", (uint32_t)info->chip_id.major);
 	printf("Chip ID Minor Version:   0x%x\n", (uint32_t)info->chip_id.minor);
