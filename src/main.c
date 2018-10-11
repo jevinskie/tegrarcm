@@ -538,6 +538,7 @@ int main(int argc, char **argv)
 		if (ret2)
 			error(1, errno, "error initializing miniloader");
 
+#if 0
 		// device may have re-enumerated, so reopen USB
 		usb_close(usb);
 
@@ -546,6 +547,7 @@ int main(int argc, char **argv)
 		, &match_port, &match_bus, match_ports, &match_ports_len
 #endif
 		);
+#endif
 		if (!usb)
 			error(1, errno, "could not open USB device");
 	}
