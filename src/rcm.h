@@ -126,4 +126,5 @@ int rcm_create_msg(
 	uint32_t payload_len,
 	uint8_t **msg);
 
+uint16_t get_devid(void);
 #endif // _RCM_H

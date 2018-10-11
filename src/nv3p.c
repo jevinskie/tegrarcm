@@ -35,6 +35,7 @@
 #include "nv3p.h"
 #include "usb.h"
 #include "debug.h"
+#include "rcm.h"
 
 /* nv3p command packet format */
 /*|------------32 bits--------------|*/
@@ -416,7 +417,10 @@ static int nv3p_get_cmd_return(nv3p_handle_t h3p, uint32_t command, void *args)
 
 	switch (command) {
 	case NV3P_CMD_GET_PLATFORM_INFO:
-		length = sizeof(nv3p_platform_info_t);
+		if ((get_devid() & 0xff) == USB_DEVID_NVIDIA_TEGRA132)
+			length = sizeof(nv3p_platform_info_t132_t);
+		else
+			length = sizeof(nv3p_platform_info_t);
 		break;
 	case NV3P_CMD_GET_BCT:
 		length = sizeof(nv3p_bct_info_t);

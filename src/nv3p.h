@@ -157,6 +157,15 @@ typedef struct {
 	nv3p_board_id_t board_id;
 } nv3p_platform_info_t;
 
+/*
+ * nv3p_platform_info_t132_t: retrieves t132 system information. All paramters
+ * are output parameters.
+ */
+typedef struct {
+	nv3p_platform_info_t base;
+	uint32_t warranty_fuse;
+	uint8_t skip_auto_detect;
+} nv3p_platform_info_t132_t;
 
 /*
  * nv3p_bct_info_t: holds information about BCT size

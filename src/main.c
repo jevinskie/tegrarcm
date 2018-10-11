@@ -244,13 +244,25 @@ static bool is_soc_supported_for_signed_msgs(uint32_t soc, uint16_t *devid)
 	return false;
 }
 
+static uint16_t _devid = 0;
+static void set_devid(uint16_t devid)
+{
+	_devid = devid;
+}
+
+uint16_t get_devid(void)
+{
+	return _devid;
+}
+
 int main(int argc, char **argv)
 {
 	// discover devices
 	uint64_t uid[2];
 	int actual_len;
 	usb_device_t *usb;
-	nv3p_platform_info_t info;
+	nv3p_platform_info_t132_t info_t132;
+	nv3p_platform_info_t *info = (nv3p_platform_info_t *)&info_t132;
 	nv3p_handle_t h3p;
 	int ret, ret2;
 	int c;
@@ -524,6 +536,7 @@ int main(int argc, char **argv)
 	devid = 0x7330;
 #endif
 	printf("device id: 0x%x\n", devid);
+	set_devid(devid);
 
 	ret = usb_read(usb, (uint8_t *)uid, sizeof(uid), &actual_len);
 	// ret = 0;
@@ -581,23 +594,27 @@ int main(int argc, char **argv)
 	}
 
 	// get platform info and dump it
-	memset(&info, 0, sizeof(info));
-	ret = nv3p_cmd_send(h3p, NV3P_CMD_GET_PLATFORM_INFO, (uint8_t *)&info);
+	memset(info, 0, sizeof(nv3p_platform_info_t132_t));
+
+	if ((devid & 0xff) == USB_DEVID_NVIDIA_TEGRA132)
+		info_t132.skip_auto_detect = 1;
+
+	ret = nv3p_cmd_send(h3p, NV3P_CMD_GET_PLATFORM_INFO, (uint8_t *)info);
 	dprintf("platform info:\n");
-	dump_hex((uint8_t *)&info, sizeof(info));
+	dump_hex((uint8_t *)info, sizeof(nv3p_platform_info_t132_t));
 	if (ret)
 		error(1, errno, "retreiving platform info");
 	ret = wait_status(h3p);
 	if (ret)
 		error(1, errno, "wait status after platform info");
-	dump_platform_info(&info);
-	set_platform_info(&info);
+	dump_platform_info(info);
+	set_platform_info(info);
 
-	if (info.op_mode != RCM_OP_MODE_DEVEL &&
-		info.op_mode != RCM_OP_MODE_ODM_OPEN &&
-		info.op_mode != RCM_OP_MODE_ODM_SECURE &&
-		info.op_mode != RCM_OP_MODE_ODM_SECURE_PKC &&
-		info.op_mode != RCM_OP_MODE_PRE_PRODUCTION)
+	if (info->op_mode != RCM_OP_MODE_DEVEL &&
+		info->op_mode != RCM_OP_MODE_ODM_OPEN &&
+		info->op_mode != RCM_OP_MODE_ODM_SECURE &&
+		info->op_mode != RCM_OP_MODE_ODM_SECURE_PKC &&
+		info->op_mode != RCM_OP_MODE_PRE_PRODUCTION)
 		error(1, ENODEV, "device is not in developer, open, secure, "
 			  "or pre-production mode, cannot flash");
 
@@ -1156,6 +1173,17 @@ static void dump_platform_info(nv3p_platform_info_t *info)
 	printf("Device Config Strap:     0x%x\n", info->dev_conf_strap);
 	printf("Device Config Fuse:      0x%x\n", info->dev_conf_fuse);
 	printf("SDRAM Config Strap:      0x%x\n", info->sdram_conf_strap);
+
+	printf("Board Number:            0x%x\n", info->board_id.board_no);
+	printf("Fab:                     0x%x\n", info->board_id.fab);
+	printf("Memory Type:             0x%x\n", info->board_id.mem_type);
+	printf("Freqency:                0x%x\n", info->board_id.freq);
+
+	if (info->chip_id.id == 0x13) {
+		nv3p_platform_info_t132_t *info_t132 = (nv3p_platform_info_t132_t *)info;
+		printf("Warranty fuse:           0x%x\n", info_t132->warranty_fuse);
+		printf("Skip auto detect:        0x%hhx\n", info_t132->skip_auto_detect);
+	}
 }
 
 
