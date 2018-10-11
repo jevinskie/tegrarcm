@@ -51,6 +51,9 @@ static void error (int status, int errnum, const char *message, ...)
 	vfprintf(stderr, message, args);
 	fprintf(stderr, "\n");
 	va_end(args);
+	if (status) {
+		exit (status);
+	}
 }
 #endif
 
@@ -126,6 +129,7 @@ enum cmdline_opts {
 	OPT_USB_TIMEOUT,
 	OPT_SBK,
 	OPT_ENC_MSGS,
+	OPT_FG,
 	OPT_END,
 };
 
@@ -182,6 +186,8 @@ static void usage(char *progname)
 	fprintf(stderr, "\t\tSpecify SBK, an all zero key is used otherwise\n");
 	fprintf(stderr, "\t--enc\n");
 	fprintf(stderr, "\t\tEncrypt RCM messages with the SBK\n");
+	fprintf(stderr, "\t--fg\n");
+	fprintf(stderr, "\t\tFusee Gelee mode where miniloader has been sent by F-G\n");
 	fprintf(stderr, "\n");
 }
 
@@ -268,6 +274,7 @@ int main(int argc, char **argv)
 	char *signed_msgs_file = NULL;
 	uint32_t soc = 0;
 	bool download_signed_msgs = false;
+	bool fg_mode = false;
 
 	static struct option long_options[] = {
 		[OPT_BCT]        = {"bct", 1, 0, 0},
@@ -287,8 +294,9 @@ int main(int argc, char **argv)
 		[OPT_SOC]        = {"soc", 1, 0, 0},
 		[OPT_DOWNLOAD_SIGNED_MSGS] = {"download-signed-msgs", 0, 0, 0},
 		[OPT_USB_TIMEOUT] = {"usb-timeout", 1, 0, 0},
-		[OPT_SBK] 		 = {"sbk", 1, 0, 0},
-		[OPT_ENC_MSGS]	 = {"enc", 0, 0, 0},
+		[OPT_SBK]        = {"sbk", 1, 0, 0},
+		[OPT_ENC_MSGS]   = {"enc", 0, 0, 0},
+		[OPT_FG]         = {"enc", 0, 0, 0},
 		[OPT_END]        = {0, 0, 0, 0}
 	};
 	// parse command line args
@@ -361,6 +369,9 @@ int main(int argc, char **argv)
 				break;
 			case OPT_ENC_MSGS:
 				enc_msgs = true;
+				break;
+			case OPT_FG:
+				fg_mode = true;
 				break;
 			case OPT_HELP:
 			default:
@@ -526,17 +537,19 @@ int main(int argc, char **argv)
 		else
 			error(1, errno, "USB read truncated");
 
-		// initialize rcm
-		ret2 = initialize_rcm(devid, usb, pkc_keyfile,
-					signed_msgs_file, download_signed_msgs);
-		if (ret2)
-			error(1, errno, "error initializing RCM protocol");
+		if (!fg_mode) {
+			// initialize rcm
+			ret2 = initialize_rcm(devid, usb, pkc_keyfile,
+						signed_msgs_file, download_signed_msgs);
+			if (ret2)
+				error(1, errno, "error initializing RCM protocol");
 
-		// download the miniloader to start nv3p or create ml rcm file
-		ret2 = initialize_miniloader(devid, usb, mlfile, mlentry,
-					signed_msgs_file, download_signed_msgs);
-		if (ret2)
-			error(1, errno, "error initializing miniloader");
+			// download the miniloader to start nv3p or create ml rcm file
+			ret2 = initialize_miniloader(devid, usb, mlfile, mlentry,
+						signed_msgs_file, download_signed_msgs);
+			if (ret2)
+				error(1, errno, "error initializing miniloader");
+		}
 
 #if 0
 		// device may have re-enumerated, so reopen USB
@@ -558,7 +571,7 @@ int main(int argc, char **argv)
 		error(1, errno, "3p open failed");
 
 	// read the BCT
-	if (do_read) {
+	if (0 && do_read) {
 		printf("reading BCT from system, writing to %s...", bctfile);
 		ret = read_bct(h3p, bctfile);
 		if (ret)
@@ -568,7 +581,10 @@ int main(int argc, char **argv)
 	}
 
 	// get platform info and dump it
+	memset(&info, 0, sizeof(info));
 	ret = nv3p_cmd_send(h3p, NV3P_CMD_GET_PLATFORM_INFO, (uint8_t *)&info);
+	dprintf("platform info:\n");
+	dump_hex((uint8_t *)&info, sizeof(info));
 	if (ret)
 		error(1, errno, "retreiving platform info");
 	ret = wait_status(h3p);
@@ -917,7 +933,7 @@ static int send_file(nv3p_handle_t h3p, const char *filename)
 	uint8_t *buf = 0;
 	uint32_t size;
 	uint64_t total;
-	uint32_t bytes;
+	ssize_t bytes;
 	uint64_t count;
 	char *spinner = "-\\|/";
 	int spin_idx = 0;
@@ -1178,6 +1194,8 @@ static int read_bct(nv3p_handle_t h3p, char *filename)
 	uint8_t *buf;
 
 	ret = nv3p_cmd_send(h3p, NV3P_CMD_GET_BCT, (uint8_t *)&bct_info);
+	dprintf("bct_info\n");
+	dump_hex((uint8_t *)&bct_info, sizeof(bct_info));
 	if (ret) {
 		dprintf("error sending get bct command\n");
 		goto out;
